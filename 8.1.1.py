@@ -8,6 +8,8 @@ batch_size = 100
 learning_rate = 0.01
 learning_rate_decay = 0.99
 max_steps = 30000
+model_save_path = './models/8.1.1/'
+model_name = 'mnist_cnn'
 
 
 def hidden_layers(inputs, regularizer, avg_class, reuse):
@@ -36,7 +38,7 @@ def hidden_layers(inputs, regularizer, avg_class, reuse):
     # layer 4
     with tf.name_scope("S4-max_pool"):
         pool2 = tf.nn.max_pool(relu2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
-        shape = pool2.get_shape().as_list() # shape = [100, 7, 7, 64]
+        shape = pool2.get_shape().as_list()  # shape = [100, 7, 7, 64]
         nodes = shape[1] * shape[2] * shape[3]  # nodes=3136
         reshaped = tf.reshape(pool2, [shape[0], nodes])
 
@@ -63,7 +65,7 @@ def hidden_layers(inputs, regularizer, avg_class, reuse):
             result = tf.matmul(full1, full2_weights) + full2_biases
         else:
             result = tf.matmul(full1, avg_class.average(full2_weights)) + avg_class.average(full2_biases)
-
+        print(result.name)
     return result
 
 
@@ -92,9 +94,16 @@ train_op = tf.group([train, variables_averages_op])
 prediction = tf.equal(tf.argmax(average_y, 1), tf.argmax(y_, 1))
 accuracy = tf.reduce_mean(tf.cast(prediction, tf.float32))
 
-with tf.Session() as sess:
+saver = tf.train.Saver()
+
+# 最多占gpu资源的70%
+gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
+# 开始不会给tensorflow全部gpu资源 而是按需增加
+gpu_options.allow_growth = True
+config = tf.ConfigProto(allow_soft_placement=True, gpu_options=gpu_options)
+with tf.Session(config=config) as sess:
     sess.run(tf.global_variables_initializer())
-    for i in range(max_steps):
+    for i in range(1, max_steps + 1):
         if i % batch_size == 0:
             x_valid, y_valid = mnist.validation.next_batch(batch_size)
             reshaped_valid = np.reshape(x_valid, (batch_size, 28, 28, 1))
@@ -107,3 +116,6 @@ with tf.Session() as sess:
         reshaped_train = np.reshape(x_train, (batch_size, 28, 28, 1))
         train_feed = {x: reshaped_train, y_: y_train}
         sess.run(train_op, feed_dict=train_feed)
+
+        if i % 1000 == 0:
+            saver.save(sess, save_path=model_save_path + model_name, global_step=training_step)

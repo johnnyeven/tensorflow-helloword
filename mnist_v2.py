@@ -48,7 +48,12 @@ correct_prediction = tf.equal(tf.argmax(average_y, 1), tf.argmax(y_, 1))
 # correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
 
-with tf.Session() as sess:
+# 最多占gpu资源的70%
+gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
+config = tf.ConfigProto(allow_soft_placement=True, gpu_options=gpu_options)
+# 开始不会给tensorflow全部gpu资源 而是按需增加
+config.gpu_options.allow_growth = True
+with tf.Session(config=config) as sess:
     sess.run(tf.global_variables_initializer())
 
     # 准备验证数据
@@ -58,7 +63,7 @@ with tf.Session() as sess:
 
     for i in range(max_steps):
 
-        if i % 1000 == 0:
+        if i % batch_size == 0:
             validate_accuracy = sess.run(accuracy, feed_dict=validate_feed)
             print("After %d trainging step(s) ,validation accuracy"
                   "using average model is %g%%" % (i, validate_accuracy * 100))
