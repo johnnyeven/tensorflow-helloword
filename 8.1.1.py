@@ -40,7 +40,7 @@ def hidden_layers(inputs, regularizer, avg_class, reuse):
         pool2 = tf.nn.max_pool(relu2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
         shape = pool2.get_shape().as_list()  # shape = [100, 7, 7, 64]
         nodes = shape[1] * shape[2] * shape[3]  # nodes=3136
-        reshaped = tf.reshape(pool2, [shape[0], nodes])
+        reshaped = tf.reshape(pool2, [tf.shape(pool2)[0], nodes])
 
     # layer 5
     with tf.variable_scope("F5-full", reuse=reuse):
@@ -65,12 +65,13 @@ def hidden_layers(inputs, regularizer, avg_class, reuse):
             result = tf.matmul(full1, full2_weights) + full2_biases
         else:
             result = tf.matmul(full1, avg_class.average(full2_weights)) + avg_class.average(full2_biases)
-        print(result.name)
     return result
 
 
-x = tf.placeholder(tf.float32, [batch_size, 28, 28, 1], name="input")
-y_ = tf.placeholder(tf.float32, [None, 10], name="output")
+with tf.variable_scope('placeholders'):
+    x = tf.placeholder(tf.float32, [None, 28, 28, 1], name="input")
+    y_ = tf.placeholder(tf.float32, [None, 10], name="label")
+
 regularizer = tf.contrib.layers.l2_regularizer(0.0001)
 y = hidden_layers(x, regularizer, avg_class=None, reuse=False)
 
@@ -81,8 +82,9 @@ variables_averages_op = variable_averages.apply(tf.trainable_variables())
 average_y = hidden_layers(x, regularizer, variable_averages, reuse=True)
 
 # loss
-cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=y, labels=tf.argmax(y_, 1))
-loss = tf.reduce_mean(cross_entropy) + tf.add_n(tf.get_collection('losses'))
+with tf.variable_scope('loss'):
+    cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=y, labels=tf.argmax(y_, 1))
+    loss = tf.reduce_mean(cross_entropy) + tf.add_n(tf.get_collection('losses'))
 
 # train
 learning_rate = tf.train.exponential_decay(learning_rate, training_step, mnist.train.num_examples / batch_size,
@@ -91,8 +93,10 @@ train = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_s
 train_op = tf.group([train, variables_averages_op])
 
 # prediction
-prediction = tf.equal(tf.argmax(average_y, 1), tf.argmax(y_, 1))
-accuracy = tf.reduce_mean(tf.cast(prediction, tf.float32))
+with tf.variable_scope('prediction'):
+    prediction_index = tf.argmax(y, 1, name='prediction_index')
+    prediction = tf.equal(tf.argmax(average_y, 1), tf.argmax(y_, 1))
+    accuracy = tf.reduce_mean(tf.cast(prediction, tf.float32), name='accuracy')
 
 saver = tf.train.Saver()
 
